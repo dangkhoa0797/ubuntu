@@ -6,72 +6,65 @@
   vars_files:
     - variables.yml
   tasks:
-    # UPGRADE AND INSTALL REQUIRED UBUNTU PACKAGES
-    - name: Update apt cache
-      apt: update_cache=yes cache_valid_time=3600
-
-    - name: Upgrade all apt packages
-      apt: upgrade=dist
-
-    - name: Install dependencies
-      apt:
+    - name: date time
+      shell: sudo hwclock --hctosys 
+    - name: Install a list of packages with a list variable
+      package:
         name: "{{ packages }}"
         state: present
         update_cache: yes
       vars:
         packages:
+          - htop
+          - telnet
+          - wget
+          - curl
+          - cockpit
+          - net-tools
+          - nfs-common
+          - python3
+          - git
+      tags: pkg 
+
+    - name: Install aptitude
+      apt:
+        name: aptitude
+        state: latest
+        update_cache: true
+
+    - name: Install required system packages
+      apt:
+        pkg:
           - apt-transport-https
           - ca-certificates
           - curl
           - software-properties-common
-          - gnupg-agent
+          - python3-pip
+          - virtualenv
+          - python3-setuptools
+        state: latest
+        update_cache: true
 
-    - name: Add an apt signing key for Docker
+    - name: Add Docker GPG apt Key
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
         state: present
 
-    - name: Add apt repository for stable version
+    - name: Add Docker Repository
       apt_repository:
-        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable
+        repo: deb https://download.docker.com/linux/ubuntu focal stable
         state: present
 
-    - name: Install Docker
+    - name: Update apt and install docker-ce
       apt:
-        name: "{{ packages }}"
-        state: present
-        update_cache: yes
-      vars:
-        packages:
-          - docker-ce
-          - docker-ce-cli
-          - containerd.io
-
-    - name: Add user to docker group
-      user:
-        name: "{{ansible_user}}"
-        group: docker
-    - name: Restart service docker, in all cases
-      ansible.builtin.service:
-        name: docker
-        state: restarted
-
-    - name: Install related Ubuntu packages
-      apt:
-        name: "{{ packages }}"
+        name: docker-ce
         state: latest
-      vars:
-        packages:
-          - python3-pip
-          - mc
-          - git
+        update_cache: true
 
-
-    - name: Install python packages
+    - name: Install Docker Module for Python
       pip:
-        name:
-          - docker
-          - docker-compose
+        name: docker
+         
   # Config limit parameters
     - name: soft
       shell: echo "*    soft    nofile 819200" >>/etc/security/limits.conf
@@ -91,17 +84,6 @@
         name: docker
         state: restarted
 
-    - name: Leave swarm for a node
-      docker_swarm:
-        state: absent
-    
-    - name: Remove a swarm manager
-      docker_swarm:
-        state: absent
-        force: true
-    - name: swarm
-      shell: docker swarm init
-      tags: swarm
 
     - name: login dockerhub.dttt.vn
       docker_login:
@@ -157,20 +139,11 @@
 
     - name: Clone a github repository
       git:
-        repo: "https://{{ username | urlencode }}:{{ password | urlencode }}@git.dttt.vn/gitadmin/ansible.git"
+        repo: "https://khoahd:dangkhoabro9x@git.dttt.vn/gitadmin/ansible.git"
         dest: /root/setup
         clone: yes
         update: yes
-      vars:
-        - username: khoahd
-        - password: dangkhoabro9x
       tags: git
-    
-    - name: Init a new swarm with default parameters
-      docker_swarm:
-        state: present
-        task_history_retention_limit: 3
-      tags: swarm
 
     - name: Insert data to daemon.json
       shell: |
@@ -193,6 +166,12 @@
         state: restarted
       tags: daemon
 
+    - name: Init a new swarm
+      community.general.docker_swarm:
+        state: present
+        task_history_retention_limit: 3
+      tags: swarm 
+
     - name: install jsondiff pyyaml
       pip:
         name:
@@ -212,7 +191,7 @@
         source: pull
       loop:
         - dockerhub.dttt.vn/etcdkeeper:latest
-        - dockerhub.dttt.vn/imagemagick:latest
+#        - dockerhub.dttt.vn/imagemagick:latest
 #        - dockerhub.dttt.vn/documentserver:3.0
       tags: images
 
@@ -263,18 +242,4 @@
         compose:
           - /root/setup/traefik.yml
       tags: traefik
-    - name: Install a list of packages with a list variable
-      package:
-        name: "{{ packages }}"
-        state: present
-        update_cache: yes
-      vars:
-        packages:
-          - htop
-          - telnet
-          - wget
-          - curl
-          - cockpit
-          - net-tools
-          - nfs-common
-      tags: pkg
+
