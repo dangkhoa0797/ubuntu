@@ -99,11 +99,8 @@
       docker_swarm:
         state: absent
         force: true
-
-    - name: Init a new swarm with default parameters
-      docker_swarm:
-        state: present
-        task_history_retention_limit: 3
+    - name: swarm
+      shell: docker swarm init
       tags: swarm
 
     - name: login dockerhub.dttt.vn
@@ -168,6 +165,12 @@
         - username: khoahd
         - password: dangkhoabro9x
       tags: git
+    
+    - name: Init a new swarm with default parameters
+      docker_swarm:
+        state: present
+        task_history_retention_limit: 3
+      tags: swarm
 
     - name: Insert data to daemon.json
       shell: |
