@@ -1,0 +1,245 @@
+---
+- hosts: ubuntu3
+  remote_user: root
+  ignore_unreachable: yes
+  ignore_errors: yes
+  vars_files:
+    - variables.yml
+  tasks:
+    - name: date time
+      shell: sudo hwclock --hctosys 
+    - name: Install a list of packages with a list variable
+      package:
+        name: "{{ packages }}"
+        state: present
+        update_cache: yes
+      vars:
+        packages:
+          - htop
+          - telnet
+          - wget
+          - curl
+          - cockpit
+          - net-tools
+          - nfs-common
+          - python3
+          - git
+      tags: pkg 
+
+    - name: Install aptitude
+      apt:
+        name: aptitude
+        state: latest
+        update_cache: true
+
+    - name: Install required system packages
+      apt:
+        pkg:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - virtualenv
+          - python3-setuptools
+        state: latest
+        update_cache: true
+
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu focal stable
+        state: present
+
+    - name: Update apt and install docker-ce
+      apt:
+        name: docker-ce
+        state: latest
+        update_cache: true
+
+    - name: Install Docker Module for Python
+      pip:
+        name: docker
+         
+  # Config limit parameters
+    - name: soft
+      shell: echo "*    soft    nofile 819200" >>/etc/security/limits.conf
+    - name: hard
+      shell: echo "*    hard    nofile 819200" >>/etc/security/limits.conf
+    - name: touch
+      shell: touch /etc/security/limits.conf
+    - name: file-max
+      shell: echo "fs.file-max = 200000" >>/etc/sysctl.conf
+    - name: inotify.max_user_watches
+      shell: echo "fs.inotify.max_user_watches = 2048576" >>/etc/sysctl.conf
+    - name: inotify.max_user_instances
+      shell: echo "fs.inotify.max_user_instances = 524288" >>/etc/sysctl.conf
+
+#    - name: Restart service docker, in all cases
+#      ansible.builtin.service:
+#        name: docker
+#        state: restarted
+#
+
+    - name: login dockerhub.dttt.vn
+      docker_login:
+        registry: dockerhub.dttt.vn
+        username: admin
+        password: Trinam@2019
+        reauthorize: yes
+
+    - name: Install firewalld
+      ansible.builtin.apt:
+        name: firewalld
+        state: latest
+    - name: start firewalld
+      service:
+        name: firewalld
+        state: started
+        enabled: yes
+      become: yes
+    - name: enable 1234
+      firewalld:
+        zone: public
+        port: 1234/tcp
+        permanent: true
+        state: enabled
+      become: yes
+    - name: Add port to firewalld
+      firewalld:
+        port: "{{ item }}"
+        permanent: yes
+        state: enabled
+      loop:
+        - 2376/tcp
+        - 2377/tcp
+        - 4789/tcp
+        - 7946/tcp
+        - 9001/tcp
+    #Supports init systems include BSD init, OpenRC, SysV, Solaris SMF, systemd, upstart.
+    - name: Restart service
+      service:
+        name: firewalld
+        state: restarted
+
+    #Controls systemd services on remote hosts.
+    - name: Restart service
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: firewalld
+    - name: Restart service
+      service:
+        name: docker
+        state: restarted
+
+    - name: Clone a github repository
+      git:
+        repo: "https://khoahd:dangkhoabro9x@git.dttt.vn/gitadmin/ansible.git"
+        dest: /root/setup
+        clone: yes
+        update: yes
+      tags: git
+
+    - name: Insert data to daemon.json
+      shell: |
+        printf '{
+           "insecure-registries": [
+             "dockerhub.dttt.vn"
+             ],
+           "data-root":"/home/docker",
+           "log-driver": "json-file",
+           "log-opts": {
+             "max-size": "10m",
+             "max-file": "3"
+           },
+           "metrics-addr": "0.0.0.0:9323"
+        }' > /etc/docker/daemon.json
+      tags: daemon
+    - name: Restart service docker, in all cases
+      ansible.builtin.service:
+        name: docker
+        state: restarted
+      tags: daemon
+
+    - name: Init a new swarm
+      community.general.docker_swarm:
+        state: present
+        task_history_retention_limit: 3
+      tags: swarm 
+
+    - name: install jsondiff pyyaml
+      pip:
+        name:
+          - jsondiff
+          - pyyaml
+    - name: Deploy stack from a compose file portainer.yml
+      docker_stack:
+        state: present
+        name: portainer
+        compose:
+          - /root/setup/portainer-agent-stack.yml
+      tags: portainer
+
+    - name: pull an image
+      docker_image:
+        name: "{{item}}"
+        source: pull
+      loop:
+        - dockerhub.dttt.vn/etcdkeeper:latest
+#        - dockerhub.dttt.vn/imagemagick:latest
+#        - dockerhub.dttt.vn/documentserver:3.0
+      tags: images
+
+    - name: Create a volume
+      docker_volume:
+        name: "{{item}}"
+      loop:
+        - mongo_data
+        - rabbitmq_data
+        - redis_data
+        - rabbitmq_data
+        - etcd_data
+        - sqlserver_data
+      tags: volume
+
+    - name: Create a network infrastructure
+      docker_network:
+        name: infrastructure
+        driver: overlay
+      tags: netw
+
+    - name: Create a network traefik_main
+      docker_network:
+        name: traefik_main
+        driver: overlay
+      tags: netw
+
+    - name: Create config redis.conf (from a file on the control machine)
+      docker_config:
+        name: redis.conf
+        data: user root on allkeys allchannels allcommands >VgJyAzye2YZIz3nT
+
+          user default off
+        state: present
+
+    - name: Deploy stack from a compose file infrastructure
+      docker_stack:
+        state: present
+        name: infrastructure
+        compose:
+          - /root/setup/infrastructure.yml
+      tags: infra
+
+    - name: Deploy stack from a compose file traefik
+      docker_stack:
+        state: present
+        name: traefik
+        compose:
+          - /root/setup/traefik.yml
+      tags: traefik
+

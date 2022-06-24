@@ -1,5 +1,5 @@
 ---
-- hosts: ubuntu2
+- hosts: ubuntu3
   remote_user: root
   ignore_unreachable: yes
   ignore_errors: yes
@@ -79,11 +79,11 @@
     - name: inotify.max_user_instances
       shell: echo "fs.inotify.max_user_instances = 524288" >>/etc/sysctl.conf
 
-    - name: Restart service docker, in all cases
-      ansible.builtin.service:
-        name: docker
-        state: restarted
-
+#    - name: Restart service docker, in all cases
+#      ansible.builtin.service:
+#        name: docker
+#        state: restarted
+#
 
     - name: login dockerhub.dttt.vn
       docker_login:
@@ -136,15 +136,6 @@
       service:
         name: docker
         state: restarted
-
-    - name: Clone a github repository
-      git:
-        repo: "https://khoahd:dangkhoabro9x@git.dttt.vn/gitadmin/ansible.git"
-        dest: /root/setup
-        clone: yes
-        update: yes
-      tags: git
-
     - name: Insert data to daemon.json
       shell: |
         printf '{
@@ -160,86 +151,27 @@
            "metrics-addr": "0.0.0.0:9323"
         }' > /etc/docker/daemon.json
       tags: daemon
+
     - name: Restart service docker, in all cases
       ansible.builtin.service:
         name: docker
         state: restarted
       tags: daemon
 
-    - name: Init a new swarm
+#    - name: Remove a swarm manager
+ #     docker_swarm:
+  #      state: absent
+   #     force: true
+    - name: Add nodes worker
       community.general.docker_swarm:
-        state: present
-        task_history_retention_limit: 3
-      tags: swarm 
+        state: join
+        advertise_addr: "{{ ip }}"
+        join_token: "{{ token }}"
+        remote_addrs: "{{ip}}"
+      tags: worker 
 
     - name: install jsondiff pyyaml
       pip:
         name:
           - jsondiff
           - pyyaml
-    - name: Deploy stack from a compose file portainer.yml
-      docker_stack:
-        state: present
-        name: portainer
-        compose:
-          - /root/setup/portainer-agent-stack.yml
-      tags: portainer
-
-    - name: pull an image
-      docker_image:
-        name: "{{item}}"
-        source: pull
-      loop:
-        - dockerhub.dttt.vn/etcdkeeper:latest
-#        - dockerhub.dttt.vn/imagemagick:latest
-#        - dockerhub.dttt.vn/documentserver:3.0
-      tags: images
-
-    - name: Create a volume
-      docker_volume:
-        name: "{{item}}"
-      loop:
-        - mongo_data
-        - rabbitmq_data
-        - redis_data
-        - rabbitmq_data
-        - etcd_data
-        - sqlserver_data
-      tags: volume
-
-    - name: Create a network infrastructure
-      docker_network:
-        name: infrastructure
-        driver: overlay
-      tags: netw
-
-    - name: Create a network traefik_main
-      docker_network:
-        name: traefik_main
-        driver: overlay
-      tags: netw
-
-    - name: Create config redis.conf (from a file on the control machine)
-      docker_config:
-        name: redis.conf
-        data: user root on allkeys allchannels allcommands >VgJyAzye2YZIz3nT
-
-          user default off
-        state: present
-
-    - name: Deploy stack from a compose file infrastructure
-      docker_stack:
-        state: present
-        name: infrastructure
-        compose:
-          - /root/setup/infrastructure.yml
-      tags: infra
-
-    - name: Deploy stack from a compose file traefik
-      docker_stack:
-        state: present
-        name: traefik
-        compose:
-          - /root/setup/traefik.yml
-      tags: traefik
-
