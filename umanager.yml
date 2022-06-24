@@ -143,6 +143,8 @@
         dest: /root/setup
         clone: yes
         update: yes
+        single_branch: yes
+        version: dev_5.2
       tags: git
 
     - name: Insert data to daemon.json
