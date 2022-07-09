@@ -41,10 +41,10 @@
           curl -X POST -H 'Content-Type: application/json' -d '{"chat_id": "-752042769", "text": "'"${ipaddr} ${ACTION}"'", "disable_notification": true}' https://api.telegram.org/bot5383352628:AAFlO9XBDATu8ZDNU9BklVyAvkgJWaI8USw/sendMessage
       tags: telegram
 
-    - name: xóa ký tự gây lỗi
+    - name: remove the error character
       shell: sed -i '2,11! d' /Scripts/telegram.sh
       tags: telegram
-    - name: xóa ký tự gây lỗi 2
+    - name: remove the error character 2
       shell: truncate -s-1 /Scripts/telegram.sh
       tags: telegram
     - name: cap quyen thuc thi telegram
