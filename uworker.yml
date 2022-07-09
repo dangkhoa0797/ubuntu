@@ -1,5 +1,5 @@
 ---
-- hosts: ubuntu3
+- hosts: "{{ hname }}"
   remote_user: root
   ignore_unreachable: yes
   ignore_errors: yes
@@ -7,7 +7,11 @@
     - variables.yml
   tasks:
     - name: date time
-      shell: sudo hwclock --hctosys 
+      shell: |
+        sudo timedatectl set-timezone Asia/Ho_Chi_Minh
+        sudo hwclock --hctosys
+        hwclock --systohc
+        timedatectl set-ntp on
     - name: Install a list of packages with a list variable
       package:
         name: "{{ packages }}"
@@ -18,7 +22,6 @@
           - htop
           - telnet
           - wget
-          - curl
           - cockpit
           - net-tools
           - nfs-common
@@ -60,82 +63,9 @@
         name: docker-ce
         state: latest
         update_cache: true
-
-    - name: Install Docker Module for Python
-      pip:
-        name: docker
          
-  # Config limit parameters
-    - name: soft
-      shell: echo "*    soft    nofile 819200" >>/etc/security/limits.conf
-    - name: hard
-      shell: echo "*    hard    nofile 819200" >>/etc/security/limits.conf
-    - name: touch
-      shell: touch /etc/security/limits.conf
-    - name: file-max
-      shell: echo "fs.file-max = 200000" >>/etc/sysctl.conf
-    - name: inotify.max_user_watches
-      shell: echo "fs.inotify.max_user_watches = 2048576" >>/etc/sysctl.conf
-    - name: inotify.max_user_instances
-      shell: echo "fs.inotify.max_user_instances = 524288" >>/etc/sysctl.conf
-
-#    - name: Restart service docker, in all cases
-#      ansible.builtin.service:
-#        name: docker
-#        state: restarted
-#
-
-    - name: login dockerhub.dttt.vn
-      docker_login:
-        registry: dockerhub.dttt.vn
-        username: admin
-        password: Trinam@2019
-        reauthorize: yes
-
-    - name: Install firewalld
-      ansible.builtin.apt:
-        name: firewalld
-        state: latest
-    - name: start firewalld
-      service:
-        name: firewalld
-        state: started
-        enabled: yes
-      become: yes
-    - name: enable 1234
-      firewalld:
-        zone: public
-        port: 1234/tcp
-        permanent: true
-        state: enabled
-      become: yes
-    - name: Add port to firewalld
-      firewalld:
-        port: "{{ item }}"
-        permanent: yes
-        state: enabled
-      loop:
-        - 2376/tcp
-        - 2377/tcp
-        - 4789/tcp
-        - 7946/tcp
-        - 9001/tcp
-    #Supports init systems include BSD init, OpenRC, SysV, Solaris SMF, systemd, upstart.
-    - name: Restart service
-      service:
-        name: firewalld
-        state: restarted
 
     #Controls systemd services on remote hosts.
-    - name: Restart service
-      systemd:
-        state: restarted
-        daemon_reload: yes
-        name: firewalld
-    - name: Restart service
-      service:
-        name: docker
-        state: restarted
     - name: Insert data to daemon.json
       shell: |
         printf '{
@@ -152,26 +82,33 @@
         }' > /etc/docker/daemon.json
       tags: daemon
 
-    - name: Restart service docker, in all cases
-      ansible.builtin.service:
-        name: docker
+
+    - name: Restart service, in all cases, also issue daemon-reload to pick up config changes
+      ansible.builtin.systemd:
         state: restarted
+        daemon_reload: yes
+        enabled: yes
+        name: docker
       tags: daemon
 
-#    - name: Remove a swarm manager
- #     docker_swarm:
-  #      state: absent
-   #     force: true
     - name: Add nodes worker
-      community.general.docker_swarm:
+      docker_swarm:
         state: join
-        advertise_addr: "{{ ip }}"
+        advertise_addr: "{{ ipworker }}"
         join_token: "{{ token }}"
-        remote_addrs: "{{ip}}"
+        remote_addrs: [ '"{{ipmanager}}"' ]
       tags: worker 
 
-    - name: install jsondiff pyyaml
-      pip:
-        name:
-          - jsondiff
-          - pyyaml
+  # Config limit parameters
+#    - name: soft
+#      shell: echo "*    soft    nofile 819200" >>/etc/security/limits.conf
+#    - name: hard
+#      shell: echo "*    hard    nofile 819200" >>/etc/security/limits.conf
+#    - name: touch
+#      shell: touch /etc/security/limits.conf
+#    - name: file-max
+#      shell: echo "fs.file-max = 200000" >>/etc/sysctl.conf
+#    - name: inotify.max_user_watches
+#      shell: echo "fs.inotify.max_user_watches = 2048576" >>/etc/sysctl.conf
+#    - name: inotify.max_user_instances
+#      shell: echo "fs.inotify.max_user_instances = 524288" >>/etc/sysctl.conf

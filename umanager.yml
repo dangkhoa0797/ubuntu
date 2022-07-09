@@ -1,5 +1,5 @@
 ---
-- hosts: ubuntu3
+- hosts: "{{ hname }}"
   remote_user: root
   ignore_unreachable: yes
   ignore_errors: yes
@@ -7,7 +7,11 @@
     - variables.yml
   tasks:
     - name: date time
-      shell: sudo hwclock --hctosys 
+      shell: |
+        sudo timedatectl set-timezone Asia/Ho_Chi_Minh
+        sudo hwclock --hctosys
+        hwclock --systohc
+        timedatectl set-ntp on
     - name: Install a list of packages with a list variable
       package:
         name: "{{ packages }}"
@@ -24,6 +28,7 @@
           - nfs-common
           - python3
           - git
+          - httpie
       tags: pkg 
 
     - name: Install aptitude
@@ -119,6 +124,9 @@
         - 2377/tcp
         - 4789/tcp
         - 7946/tcp
+        - 2377/udp
+        - 4789/udp
+        - 7946/udp
         - 9001/tcp
     #Supports init systems include BSD init, OpenRC, SysV, Solaris SMF, systemd, upstart.
     - name: Restart service
@@ -208,6 +216,12 @@
         - etcd_data
         - sqlserver_data
       tags: volume
+
+    - name: dang ky portainer
+      shell: |
+        http POST :9000/api/users/admin/init Username="admin" Password="dangkhoabro9x"
+        http POST :9000/api/auth Username="admin" Password="dangkhoabro9x"
+      tags: dkp
 
     - name: Create a network infrastructure
       docker_network:
