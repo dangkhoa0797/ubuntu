@@ -1,0 +1,52 @@
+---
+- hosts: "{{ hname }}"
+  remote_user: root
+  ignore_unreachable: yes
+  ignore_errors: yes
+  tasks:
+    - name: check port ssh
+      shell: netstat -ltnp | grep ssh
+      register: check 
+
+    - debug: var=check.stdout_lines
+    - name: set up firewall
+      yum:
+        name:
+          - net-tools
+    - name: Add port to firewalld
+      firewalld:
+        port: 2022/tcp
+        permanent: yes
+        state: enabled
+    - name: change port default
+      shell: sed -i "s,^#Port .*,Port 2022," /etc/ssh/sshd_config
+    - name: change port default
+      shell: sed -i "s,^Port .*,Port 2022," /etc/ssh/sshd_config
+    - name: SELINUX=disabled
+      shell: sed -i "s,SELINUX=.*,SELINUX=disabled," /etc/selinux/config
+    - name: setenforce 0
+      shell:  setenforce 0
+#    - name: restart sshd
+#      shell:  systemctl restart sshd
+    - name: Restart service sshd, in all cases
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
+    - name: reload firewall
+      ansible.builtin.service:
+        name: firewalld
+        state: reloaded
+    - name: Restart service docker, in all cases
+      ansible.builtin.service:
+        name: docker
+        state: restarted
+    - name: check port ssh
+      shell: netstat -ltnp | grep ssh
+      register: check 
+
+    - debug: var=check.stdout_lines
+
+    #- name: reload service firewalld
+    #  systemd:
+    #    name: firewalld
+    #    state: reloaded

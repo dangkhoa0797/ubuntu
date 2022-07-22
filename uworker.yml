@@ -12,6 +12,9 @@
         sudo hwclock --hctosys
         hwclock --systohc
         timedatectl set-ntp on
+      tags: 
+        - manager
+        - worker
     - name: Install a list of packages with a list variable
       package:
         name: "{{ packages }}"
@@ -27,13 +30,18 @@
           - nfs-common
           - python3
           - git
-      tags: pkg 
+      tags: 
+        - manager
+        - worker
 
     - name: Install aptitude
       apt:
         name: aptitude
         state: latest
         update_cache: true
+      tags: 
+        - manager
+        - worker
 
     - name: Install required system packages
       apt:
@@ -47,23 +55,41 @@
           - python3-setuptools
         state: latest
         update_cache: true
+      tags: 
+        - manager
+        - worker
 
     - name: Add Docker GPG apt Key
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
         state: present
+      tags: 
+        - manager
+        - worker
 
     - name: Add Docker Repository
       apt_repository:
         repo: deb https://download.docker.com/linux/ubuntu focal stable
         state: present
+      tags: 
+        - manager
+        - worker
 
     - name: Update apt and install docker-ce
       apt:
         name: docker-ce
         state: latest
         update_cache: true
-         
+      tags: 
+        - manager
+        - worker
+
+    - name: Install Docker Module for Python
+      pip:
+        name: docker
+      tags: 
+        - manager
+        - worker
 
     #Controls systemd services on remote hosts.
     - name: Insert data to daemon.json
@@ -80,7 +106,9 @@
            },
            "metrics-addr": "0.0.0.0:9323"
         }' > /etc/docker/daemon.json
-      tags: daemon
+      tags: 
+        - manager
+        - worker
 
 
     - name: Restart service, in all cases, also issue daemon-reload to pick up config changes
@@ -89,26 +117,330 @@
         daemon_reload: yes
         enabled: yes
         name: docker
-      tags: daemon
+      tags: 
+        - manager
+        - worker
 
-    - name: Add nodes worker
-      docker_swarm:
-        state: join
-        advertise_addr: "{{ ipworker }}"
-        join_token: "{{ token }}"
-        remote_addrs: [ '"{{ipmanager}}"' ]
-      tags: worker 
+    - name: login dockerhub.dttt.vn
+      docker_login:
+        registry: dockerhub.dttt.vn
+        username: admin
+        password: Trinam@2019
+        reauthorize: yes
+      tags: 
+        - manager
+        - worker
+
+    - name: Install firewalld
+      ansible.builtin.apt:
+        name: firewalld
+        state: latest
+      tags: 
+        - manager
+        - worker
+
+    - name: start firewalld
+      service:
+        name: firewalld
+        state: started
+        enabled: yes
+      become: yes
+      tags: 
+        - manager
+        - worker
+
+    - name: enable 1234
+      firewalld:
+        zone: public
+        port: 1234/tcp
+        permanent: true
+        state: enabled
+      become: yes
+      tags: 
+        - manager
+        - worker
+
+    - name: Add port to firewalld
+      firewalld:
+        port: "{{ item }}"
+        permanent: yes
+        state: enabled
+      loop:
+        - 2376/tcp
+        - 2377/tcp
+        - 4789/tcp
+        - 7946/tcp
+        - 2377/udp
+        - 4789/udp
+        - 7946/udp
+        - 9001/tcp
+      tags: 
+        - manager
+        - worker
+    #Supports init systems include BSD init, OpenRC, SysV, Solaris SMF, systemd, upstart.
+    - name: Restart service
+      service:
+        name: firewalld
+        state: restarted
+      tags: 
+        - manager
+        - worker
+
+    #Controls systemd services on remote hosts.
+    - name: Restart service
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: firewalld
+      tags: 
+        - manager
+        - worker
+
+    - name: Restart service
+      service:
+        name: docker
+        state: restarted
+      tags: 
+        - manager
+        - worker
+
+    - name: get token
+      shell: |
+        mkdir /root/token/
+        docker swarm join-token worker > /root/token/worker.sh
+        docker swarm join-token manager > /root/token/manager.sh
+      run_once: true
+      delegate_to: "{{manager}}"
+      tags: 
+        - manager
+        - worker
+    
+    - name: fetch token worker
+      ansible.builtin.fetch:
+        src: /root/token/worker.sh
+        dest: /home/token/
+        flat: yes
+      run_once: true
+      delegate_to: "{{manager}}"
+      tags: 
+        - manager
+        - worker
+    - name: fetch token manager
+      ansible.builtin.fetch:
+        src: /root/token/manager.sh
+        dest: /home/token/
+        flat: yes
+      run_once: true
+      delegate_to: "{{manager}}"
+      tags: 
+        - manager
+        - worker
+
+    - name: Copy the folder from master to client
+      copy: src=/home/token/ dest=/root
+      tags: 
+        - manager
+        - worker
+
+    - name: remove the error character
+      shell: sed -i '1d; 2d; $ d' /root/worker.sh
+      tags: worker
+    - name: cap quyen thuc thi 
+      shell: chmod u+x /root/worker.sh
+      tags: worker
+    - name: join worker docker swarm
+      shell: /root/worker.sh
+      tags: worker
+
+    - name: remove the error character
+      shell: sed -i '1d; 2d; $ d' /root/manager.sh
+      tags: manager
+    - name: cap quyen thuc thi 
+      shell: chmod u+x /root/manager.sh
+      tags: manager
+    - name: join manager(Reachable) docker swarm
+      shell: /root/manager.sh
+      tags: manager
 
   # Config limit parameters
-#    - name: soft
-#      shell: echo "*    soft    nofile 819200" >>/etc/security/limits.conf
-#    - name: hard
-#      shell: echo "*    hard    nofile 819200" >>/etc/security/limits.conf
-#    - name: touch
-#      shell: touch /etc/security/limits.conf
-#    - name: file-max
-#      shell: echo "fs.file-max = 200000" >>/etc/sysctl.conf
-#    - name: inotify.max_user_watches
-#      shell: echo "fs.inotify.max_user_watches = 2048576" >>/etc/sysctl.conf
-#    - name: inotify.max_user_instances
-#      shell: echo "fs.inotify.max_user_instances = 524288" >>/etc/sysctl.conf
+    - name: soft
+      shell: echo "*    soft    nofile 819200" >>/etc/security/limits.conf
+      tags: 
+        - manager
+        - worker
+    - name: hard
+      shell: echo "*    hard    nofile 819200" >>/etc/security/limits.conf
+      tags: 
+        - manager
+        - worker
+    - name: touch
+      shell: touch /etc/security/limits.conf
+      tags: 
+        - manager
+        - worker
+    - name: file-max
+      shell: echo "fs.file-max = 200000" >>/etc/sysctl.conf
+      tags: 
+        - manager
+        - worker
+    - name: inotify.max_user_watches
+      shell: echo "fs.inotify.max_user_watches = 2048576" >>/etc/sysctl.conf
+      tags: 
+        - manager
+        - worker
+    - name: inotify.max_user_instances
+      shell: echo "fs.inotify.max_user_instances = 524288" >>/etc/sysctl.conf
+      tags: 
+        - manager
+        - worker
+
+  # THÔNG BÁO ĐẾN TELEGRAM KHI SERVER REBOOT, SHUTDOWN, STARTUP
+    - name: xoa file cau hinh cu
+      shell: rm -rf /Scripts/telegram.sh
+      tags: 
+        - manager
+        - worker
+    - name: tao dich vu telegram
+      shell: |       
+        printf 'Description=Sending Alert telegram on System shutdown.
+          Requires=network.target
+          Before=shutdown.target reboot.target
+          
+          [Service]
+          Type=oneshot
+          RemainAfterExit=true
+          ExecStart=/Scripts/telegram.sh startup
+          ExecStop=/Scripts/telegram.sh shutdown
+          
+          [Install]
+          WantedBy=multi-user.target' > /etc/systemd/system/telegram.service
+      tags: 
+        - manager
+        - worker
+
+    - name: tao file telegram.sh
+      ansible.builtin.blockinfile:
+        path: /Scripts/telegram.sh
+        create: yes
+        block: |
+          #! /bin/sh
+          ipaddr=$(hostname -I | awk ' {print $1}')
+          if [ "$1" = startup ]
+          then
+              ACTION="started successfully at"
+          else
+              ACTION="is shutting down at"
+          fi
+          
+          curl -X POST -H 'Content-Type: application/json' -d '{"chat_id": "-752042769", "text": "'"${ipaddr} ${ACTION}"'", "disable_notification": true}' https://api.telegram.org/bot5383352628:AAFlO9XBDATu8ZDNU9BklVyAvkgJWaI8USw/sendMessage
+      tags: 
+        - manager
+        - worker
+
+    - name: remove the error character
+      shell: sed -i '2,11! d' /Scripts/telegram.sh
+      tags: 
+        - manager
+        - worker
+    - name: remove the error character 2
+      shell: truncate -s-1 /Scripts/telegram.sh
+      tags: 
+        - manager
+        - worker
+    - name: cap quyen thuc thi telegram
+      shell: chmod u+x /Scripts/telegram.sh
+      tags: 
+        - manager
+        - worker
+    
+    - name: khoi dong dich vu telegram
+      shell: |
+        systemctl daemon-reload
+        systemctl start telegram.service
+        systemctl enable telegram.service
+      tags: 
+        - manager
+        - worker
+
+
+# GỬI THÔNG BÁO ĐẾN TELEGRAM NẾU PING ĐẾN FACEBOOK THẤT BẠI
+
+    - name: tao file 
+      ansible.builtin.blockinfile:
+        path: /usr/local/bin/pingg.sh
+        create: yes
+        block: |
+          #!/bin/bash
+          SERVERIP="facebook.com"
+          hostname=${HOSTNAME}
+          
+          ping -c 2 facebook.com > /dev/null 2>&1
+          if [ $? -ne 0 ]
+          then
+              curl -X POST -H 'Content-Type: application/json' -d '{"chat_id": "-752042769", "text": "server: '${hostname}' ping google failure", "disable_notification": true}' https://api.telegram.org/bot5383352628:AAFlO9XBDATu8ZDNU9BklVyAvkgJWaI8USw/sendMessage
+          fi
+      tags: 
+        - manager
+        - worker
+
+    - name: xóa ký tự gây lỗi
+      shell: sed -i '2,10! d' /usr/local/bin/pingg.sh
+      tags: 
+        - manager
+        - worker
+
+    - name: cap quyen thuc thi telegram
+      shell: chmod u+x /usr/local/bin/pingg.sh
+      tags: 
+        - manager
+        - worker
+
+    - name: tao dich vu ping
+      shell: |       
+        printf '[Unit]
+          Description=ping google
+          
+          [Service]
+          ExecStart=/usr/local/bin/pingg.sh' > /etc/systemd/system/pingg.service
+      tags: 
+        - manager
+        - worker
+
+    - name: tao timer ping
+      shell: |       
+        printf '[Unit]
+          Description=ping "google.com" timer
+          
+          [Timer]
+          OnBootSec=0min
+          OnCalendar=*:*:0/30
+          Unit=pingg.service
+          
+          [Install]
+          WantedBy=multi-user.target' > /etc/systemd/system/pingg.timer
+      tags: 
+        - manager
+        - worker
+    
+    - name: kich hoat dich vu
+      shell: |
+        sudo systemctl daemon-reload
+        sudo systemctl start pingg.timer
+        sudo systemctl enable pingg.timer
+      tags: 
+        - manager
+        - worker
+
+    - name: restart docker weekly At 00:00 on Sunday
+      ansible.builtin.cron:
+        name: "restart docker weekly"
+        state: present
+        minute: "0"
+        hour: "0"
+        day: "*"
+        month: "*"
+        weekday: "sun" # can be replaced sun with 0
+        job: 'systemctl restart docker'
+      tags: 
+        - manager
+        - worker

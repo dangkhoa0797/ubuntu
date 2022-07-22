@@ -20,8 +20,8 @@ hostname -I
 cat /etc/*release
 
 4. Nhập các thông tin cần thiết cho việc setup server
-NAME=ubuntu2
-IP=192.168.253.166
+NAME=ubuntu201
+IP=192.168.253.138
 FILEDR=home         # thư mục chứa docker
 ssh-copy-id root@$IP
 
@@ -31,11 +31,14 @@ printf $NAME' ansible_host='$IP' ansible_port=2022 ansible_user=root\n' >> /etc/
 cat /etc/ansible/hosts
 
 6. chạy playbook
-ansible-playbook package.yml -e hname=$NAME
+ansible-playbook package.yml -e "hname=$NAME ip=$IP"
 sed -i "s,FILEDR,$FILEDR," setup.yml
-ansible-playbook setup.yml -e hname=$NAME
-ansible-playbook parameters.yml -e hname=$NAME
-ansible-playbook worker.yml -e "hname=centos7.1 token= ip=192.168.253.154:2377"
+
+ansible-playbook umanager.yml -e "hname=$NAME" start 9:13	complete	3:47
+
+ansible-playbook uworker.yml -e "hname=$NAME manager=<Ten may manager cua swarm>" --tags manager
+
+start 4:38 complete 4:
 
 --tags all- chạy tất cả các tác vụ, bỏ qua các thẻ (hành vi mặc định)
 --tags [tag1, tag2]- chỉ chạy các tác vụ có thẻ tag1hoặc thẻtag2

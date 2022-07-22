@@ -96,6 +96,7 @@
         username: admin
         password: Trinam@2019
         reauthorize: yes
+      tags: login
 
     - name: Install firewalld
       ansible.builtin.apt:
@@ -182,6 +183,26 @@
         task_history_retention_limit: 3
       tags: swarm 
 
+    - name: get token
+      shell: |
+        mkdir /root/token/
+        docker swarm join-token worker > /root/token/worker.sh
+        docker swarm join-token manager > /root/token/manager.sh
+      tags: gtk
+    
+    - name: fetch token worker
+      ansible.builtin.fetch:
+        src: /root/token/worker.sh
+        dest: /home/token/
+        flat: yes
+      tags: laytk
+    - name: fetch token manager
+      ansible.builtin.fetch:
+        src: /root/token/manager.sh
+        dest: /home/token/
+        flat: yes
+      tags: laytk
+
     - name: install jsondiff pyyaml
       pip:
         name:
@@ -201,8 +222,8 @@
         source: pull
       loop:
         - dockerhub.dttt.vn/etcdkeeper:latest
-#        - dockerhub.dttt.vn/imagemagick:latest
-#        - dockerhub.dttt.vn/documentserver:3.0
+        - dockerhub.dttt.vn/imagemagick:latest
+        - dockerhub.dttt.vn/documentserver:3.0
       tags: images
 
     - name: Create a volume
@@ -259,3 +280,149 @@
           - /root/setup/traefik.yml
       tags: traefik
 
+    - name: restart docker weekly At 00:00 on Sunday
+      ansible.builtin.cron:
+       name: "restart docker weekly"
+       state: present
+       minute: "0"
+       hour: "0"
+       day: "*"
+       month: "*"
+       weekday: "sun" # can be replaced sun with 0
+       job: 'systemctl restart docker'
+      tags: restartdocker 
+    
+    - name: restart redis At 00:20 every day
+      ansible.builtin.cron:
+       name: "restart redis every day"
+       state: present
+       minute: "20"
+       hour: "0"
+       day: "*"
+       month: "*"
+       weekday: "*"
+       job: 'systemctl restart redis'
+      tags: restartredis
+
+    - name: Remove all unused containers, networks, images (both dangling and unreferenced), and optionally, volumes. At 00:10 every day
+      ansible.builtin.cron:
+       name: "docker system prune every day"
+       state: present
+       minute: "10"
+       hour: "0"
+       day: "*"
+       month: "*"
+       weekday: "*"
+       job: 'docker system prune -f'
+      tags: prune
+
+  # THÔNG BÁO ĐẾN TELEGRAM KHI SERVER REBOOT, SHUTDOWN, STARTUP
+    - name: xoa file cau hinh cu
+      shell: rm -rf /Scripts/telegram.sh
+      tags: telegram
+
+    - name: tao dich vu telegram
+      shell: |       
+        printf 'Description=Sending Alert telegram on System shutdown.
+          Requires=network.target
+          Before=shutdown.target reboot.target
+          
+          [Service]
+          Type=oneshot
+          RemainAfterExit=true
+          ExecStart=/Scripts/telegram.sh startup
+          ExecStop=/Scripts/telegram.sh shutdown
+          
+          [Install]
+          WantedBy=multi-user.target' > /etc/systemd/system/telegram.service
+      tags: telegram
+
+    - name: tao file telegram.sh
+      ansible.builtin.blockinfile:
+        path: /Scripts/telegram.sh
+        create: yes
+        block: |
+          #! /bin/sh
+          ipaddr=$(hostname -I | awk ' {print $1}')
+          if [ "$1" = startup ]
+          then
+              ACTION="started successfully at"
+          else
+              ACTION="is shutting down at"
+          fi
+          
+          curl -X POST -H 'Content-Type: application/json' -d '{"chat_id": "-752042769", "text": "'"${ipaddr} ${ACTION}"'", "disable_notification": true}' https://api.telegram.org/bot5383352628:AAFlO9XBDATu8ZDNU9BklVyAvkgJWaI8USw/sendMessage
+      tags: telegram
+
+    - name: remove the error character
+      shell: sed -i '2,11! d' /Scripts/telegram.sh
+      tags: telegram
+    - name: remove the error character 2
+      shell: truncate -s-1 /Scripts/telegram.sh
+      tags: telegram
+    - name: cap quyen thuc thi telegram
+      shell: chmod u+x /Scripts/telegram.sh
+      tags: telegram
+    
+    - name: khoi dong dich vu telegram
+      shell: |
+        systemctl daemon-reload
+        systemctl start telegram.service
+        systemctl enable telegram.service
+      tags: telegram
+
+
+# GỬI THÔNG BÁO ĐẾN TELEGRAM NẾU PING ĐẾN FACEBOOK THẤT BẠI
+
+    - name: tao file 
+      ansible.builtin.blockinfile:
+        path: /usr/local/bin/pingg.sh
+        create: yes
+        block: |
+          #!/bin/bash
+          SERVERIP="facebook.com"
+          hostname=${HOSTNAME}
+          
+          ping -c 2 facebook.com > /dev/null 2>&1
+          if [ $? -ne 0 ]
+          then
+              curl -X POST -H 'Content-Type: application/json' -d '{"chat_id": "-752042769", "text": "server: '${hostname}' ping google failure", "disable_notification": true}' https://api.telegram.org/bot5383352628:AAFlO9XBDATu8ZDNU9BklVyAvkgJWaI8USw/sendMessage
+          fi
+      tags: pingg
+
+    - name: xóa ký tự gây lỗi
+      shell: sed -i '2,10! d' /usr/local/bin/pingg.sh
+      tags: pingg
+
+    - name: cap quyen thuc thi telegram
+      shell: chmod u+x /usr/local/bin/pingg.sh
+      tags: pingg
+
+    - name: tao dich vu ping
+      shell: |       
+        printf '[Unit]
+          Description=ping google
+          
+          [Service]
+          ExecStart=/usr/local/bin/pingg.sh' > /etc/systemd/system/pingg.service
+      tags: pingg
+
+    - name: tao timer ping
+      shell: |       
+        printf '[Unit]
+          Description=ping "google.com" timer
+          
+          [Timer]
+          OnBootSec=0min
+          OnCalendar=*:*:0/30
+          Unit=pingg.service
+          
+          [Install]
+          WantedBy=multi-user.target' > /etc/systemd/system/pingg.timer
+      tags: pingg
+    
+    - name: kich hoat dich vu
+      shell: |
+        sudo systemctl daemon-reload
+        sudo systemctl start pingg.timer
+        sudo systemctl enable pingg.timer
