@@ -22,7 +22,7 @@ cat /etc/*release
 4. Nhập các thông tin cần thiết cho việc setup server
 NAME=ubuntu202
 IP=192.168.253.139
-FILEDR=home         # thư mục chứa docker
+
 ssh-copy-id root@$IP
 
 5. Đăng ký client
@@ -31,8 +31,6 @@ printf $NAME' ansible_host='$IP' ansible_port=2022 ansible_user=root\n' >> /etc/
 cat /etc/ansible/hosts
 
 6. chạy playbook
-ansible-playbook package.yml -e "hname=$NAME ip=$IP"
-sed -i "s,FILEDR,$FILEDR," setup.yml
 
 ansible-playbook umanager.yml -e "hname=$NAME" start 3:49	complete	3:57
 
