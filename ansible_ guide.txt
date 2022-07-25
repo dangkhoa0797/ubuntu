@@ -20,21 +20,24 @@ hostname -I
 cat /etc/*release
 
 4. Nhập các thông tin cần thiết cho việc setup server
-NAME=ubuntu202
-IP=192.168.253.139
+NAMEM=ubuntu201
+IPM=192.168.253.138
+
+NAMEW=ubuntu202
+IPW=192.168.253.139
 
 ssh-copy-id root@$IP
 
 5. Đăng ký client
-printf $NAME' ansible_host='$IP' ansible_port=22 ansible_user=root\n' >> /etc/ansible/hosts
+printf $NAMEM' ansible_host='$IPM' ansible_port=22 ansible_user=root\n' >> /etc/ansible/hosts
 printf $NAME' ansible_host='$IP' ansible_port=2022 ansible_user=root\n' >> /etc/ansible/hosts
 cat /etc/ansible/hosts
 
 6. chạy playbook
 
-ansible-playbook umanager.yml -e "hname=$NAME" start 3:49	complete	3:57
+ansible-playbook umanager.yml -e "hname=$NAMEM" start 3:49	complete	3:57
 
-ansible-playbook uworker.yml -e "hname=$NAME manager=<Ten may manager cua swarm>" --tags manager
+ansible-playbook uworker.yml -e "hname=$NAMEW manager=$NAMEM" --tags manager / worker
 
 start 3:59 complete 4:03
 
